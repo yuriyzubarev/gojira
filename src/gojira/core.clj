@@ -83,10 +83,10 @@
   (let [[opts args banner]
         (cli/cli args
              ["-h" "--help" "Show help" :flag true :default false]
-             ["-u" "--user" "Username" :default "yzubarev"]
+             ["-u" "--user" "Username"]
              ["-p" "--password" "Password"]
              ["-s" "--sprint" "Sprint ID"]
-             ["-j" "--jira-api-url" "JIRA API URL" :default "https://jira.kokanee.abebooks.com/jira/rest/api/2"]
+             ["-j" "--jira-api-url" "JIRA API URL"]
              )]
     (when (:help opts)
       (println banner)

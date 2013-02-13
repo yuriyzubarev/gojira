@@ -3,7 +3,8 @@
     [clj-http.client :as client]
     [clojure.walk :as w]
     [clojure.tools.cli :as cli]
-    [clojure.string :as s]))
+    [clojure.string :as s]
+    [cheshire.core :as ch]))
 
 ; globals for a CLI tool: evil or pragmatic?
 (def jira-api-url)
@@ -16,12 +17,20 @@
   (remove nil? (reduce #(conj %1 (map %2)) [] ks)))
 
 (defn jira-api-call [url query-params]
-  (client/get (if (= "http" (apply str (take 4 url))) url (str jira-api-url "/" url))
-    {:basic-auth    [username password]
-     :content-type  :json
-     :insecure?     true
-     :query-params  query-params
-     :as            :json}))
+  (let [fhash (str ".tmp-" (hash  url) (hash query-params))]
+    (try
+      (read-string (slurp fhash))
+      (catch Exception e
+        (let [content
+        (client/get (if (= "http" (apply str (take 4 url))) url (str jira-api-url "/" url))
+          {:basic-auth    [username password]
+           :content-type  :json
+           :insecure?     true
+           :query-params  query-params
+           :as            :json})]
+          (println e)
+          (spit fhash content)
+          content)))))
 
 (defn search-result []
   (:body (jira-api-call "search" {:jql (str "sprint = " sprint-id " AND issuetype in standardIssueTypes()")})))

@@ -3,8 +3,7 @@
     [clj-http.client :as client]
     [clojure.walk :as w]
     [clojure.tools.cli :as cli]
-    [clojure.string :as s]
-    [cheshire.core :as ch]))
+    [clojure.string :as s]))
 
 ; globals for a CLI tool: evil or pragmatic?
 (def jira-api-url)
@@ -28,7 +27,6 @@
            :insecure?     true
            :query-params  query-params
            :as            :json})]
-          (println e)
           (spit fhash content)
           content)))))
 
@@ -36,16 +34,16 @@
   (:body (jira-api-call "search" {:jql (str "sprint = " sprint-id " AND issuetype in standardIssueTypes()")})))
 
 (defn extract-epic-data [issue-number]
-  (:summary (:fields (first (:issues (:body (jira-api-call "search" {:jql (str "issue = " issue-number)})))))))
+  (get-in (jira-api-call "search" {:jql (str "issue = " issue-number)}) [:body :issues 0 :fields :summary]))
 
 (defn extract-story-points [issue]
-  (int (or (:customfield_10243 (:fields issue)) 1)))
+  (int (or (get-in issue [:fields :customfield_10243]) 1)))
 
 (defn extract-status [issue]
-  (:name (:status (:fields issue))))
+  (get-in issue [:fields :status :name]))
 
 (defn extract-changelog [issue-url]
-    (let [histories (:histories (:changelog (:body (jira-api-call issue-url {:expand "changelog"}))))]
+    (let [histories (get-in (jira-api-call issue-url {:expand "changelog"}) [:body :changelog :histories])]
         (let [items (map vector (w/walk #(:items %) seq histories) (map #(:created %) histories))]
           (let [status-items (filter #(= "status" (:field (ffirst %))) items)]
             (map #(into {} { :from (:fromString (ffirst %)) :to (:toString (ffirst %)) :date (last %) }) status-items)))))

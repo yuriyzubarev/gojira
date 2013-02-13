@@ -9,13 +9,12 @@
 (def jira-api-url)
 (def username)
 (def password)
-(def sprint-id)
 
 (defn select-values [map ks]
   "From http://blog.jayfields.com/2011/01/clojure-select-keys-select-values-and.html"
   (remove nil? (reduce #(conj %1 (map %2)) [] ks)))
 
-(defn jira-api-call [url query-params]
+(defn call-jira-api [url query-params]
   (let [fhash (str ".tmp-" (hash  url) (hash query-params))]
     (try
       (read-string (slurp fhash))
@@ -30,35 +29,34 @@
           (spit fhash content)
           content)))))
 
-(defn search-result []
-  (:body (jira-api-call "search" {:jql (str "sprint = " sprint-id " AND issuetype in standardIssueTypes()")})))
+(defn download-sprint-issues [sprint-id]
+  (get-in 
+    (call-jira-api "search" {:jql (str "sprint = " sprint-id " AND issuetype in standardIssueTypes()")}) 
+    [:body :issues]))
 
-(defn extract-epic-data [issue-number]
-  (get-in (jira-api-call "search" {:jql (str "issue = " issue-number)}) [:body :issues 0 :fields :summary]))
+(defn download-issue-by-key [issue-key]
+  (get-in 
+    (call-jira-api "search" {:jql (str "issue = " issue-key)}) 
+    [:body :issues 0]))
 
-(defn extract-story-points [issue]
-  (int (or (get-in issue [:fields :customfield_10243]) 1)))
-
-(defn extract-status [issue]
-  (get-in issue [:fields :status :name]))
+(defn download-issue-changelog-histories-by-url [url]
+  (get-in 
+    (call-jira-api url {:expand "changelog"}) 
+    [:body :changelog :histories]))
 
 (defn extract-changelog [issue-url]
-    (let [histories (get-in (jira-api-call issue-url {:expand "changelog"}) [:body :changelog :histories])]
+    (let [histories (download-issue-changelog-histories-by-url issue-url)]
         (let [items (map vector (w/walk #(:items %) seq histories) (map #(:created %) histories))]
           (let [status-items (filter #(= "status" (:field (ffirst %))) items)]
             (map #(into {} { :from (:fromString (ffirst %)) :to (:toString (ffirst %)) :date (last %) }) status-items)))))
 
-(defn extract-search-issue-data [issue]
+(defn issue-map [issue]
     "Issue in json from 'search' command"
     {
-      :self (:self issue)
-      :status (extract-status issue)
-      :points (extract-story-points issue)
-      :epic-name (extract-epic-data (:customfield_11180 (:fields issue)))
-      :summary (str (:key issue) " " (:summary (:fields issue))) })
-
-(defn sprint-snapshot []
-    (map extract-search-issue-data (:issues (search-result))))
+      :self       (:self issue)
+      :status     (get-in issue [:fields :status :name])
+      :epic-name  (get-in (download-issue-by-key (:customfield_11180 (:fields issue))) [:fields :summary])
+      :summary    (str (:key issue) " " (:summary (:fields issue))) })
 
 (defn format-sprint-snapshot [l]
     (map #(select-values % [:self :status :points :epic-name :summary]) l))
@@ -66,8 +64,8 @@
 (defn print-sprint-snapshot [l]
     (dorun (map println (map #(s/join "\t" %) (format-sprint-snapshot l)))))
 
-(defn sprint-flow []
-    (map #(assoc % :changelog (extract-changelog (:self %))) (sprint-snapshot)))
+(defn sprint-flow [mapped-issues]
+    (map #(assoc % :changelog (extract-changelog (:self %))) mapped-issues))
 
 (defn p-flow [l]
   (let [[changelog sprint] (take 2 l)]
@@ -76,15 +74,12 @@
       :else
         (do
           (print-sprint-snapshot (list changelog))
-          ; (println (:changelog changelog))
           (dorun (map #(println (s/join "\t" %)) (map #(select-values % [:from :to :date]) (:changelog changelog))))
           (p-flow (drop 2 l))))))
 
 (defn print-sprint-flow [l]
     (let [flow (interleave l (format-sprint-snapshot l))]
       (p-flow flow)))
-      ; (println flow)))
-    ; (dorun (map println (map #(s/join "\t" %) flow)))))
 
 (defn -main [& args]
   (let [[opts args banner]
@@ -106,10 +101,9 @@
         (def jira-api-url (:jira-api-url opts))
         (def username (:user opts))
         (def password (:password opts))
-        (def sprint-id (:sprint opts))
         (cond
-          (= "snapshot" (first args)) (print-sprint-snapshot (sprint-snapshot))
-          (= "flow" (first args))     (print-sprint-flow (sprint-flow))
+          (= "snapshot" (first args)) (print-sprint-snapshot          (map issue-map (download-sprint-issues (:sprint opts))))
+          (= "flow" (first args))     (print-sprint-flow (sprint-flow (map issue-map (download-sprint-issues (:sprint opts)))))
           :else (println "Nothing to do")))
       (println banner))))
   

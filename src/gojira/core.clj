@@ -14,7 +14,7 @@
     "From http://blog.jayfields.com/2011/01/clojure-select-keys-select-values-and.html"
     (remove nil? (reduce #(conj %1 (map %2)) [] ks)))
 
-(defn call-jira-api [url query-params]
+(defn call-jira-api! [url query-params]
     (let [fhash (str ".tmp-" (hash  url) (hash query-params))]
         (try
             (read-string (slurp fhash))
@@ -29,19 +29,19 @@
                 (spit fhash content)
                 content)))))
 
-(defn download-sprint-issues [sprint-id]
+(defn download-sprint-issues! [sprint-id]
     (get-in 
-        (call-jira-api "search" {:jql (str "sprint = " sprint-id " AND issuetype in standardIssueTypes()")}) 
+        (call-jira-api! "search" {:jql (str "sprint = " sprint-id " AND issuetype in standardIssueTypes()")}) 
         [:body :issues]))
 
-(defn download-issue-by-key [issue-key]
+(defn download-issue-by-key! [issue-key]
     (get-in 
-        (call-jira-api "search" {:jql (str "issue = " issue-key)}) 
+        (call-jira-api! "search" {:jql (str "issue = " issue-key)}) 
         [:body :issues 0]))
 
-(defn download-issue-changelog-histories-by-url [url]
+(defn download-issue-changelog-histories-by-url! [url]
     (get-in 
-        (call-jira-api url {:expand "changelog"}) 
+        (call-jira-api! url {:expand "changelog"}) 
         [:body :changelog :histories]))
 
 (def issue-map-keys [:self :status :points :epic-name :summary])
@@ -52,37 +52,35 @@
         (:self jissue)
         (get-in jissue [:fields :status :name])
         (int (or (get-in jissue [:fields :customfield_10243]) 1))
-        (get-in (download-issue-by-key (:customfield_11180 (:fields jissue))) [:fields :summary])
+        (get-in (download-issue-by-key! (:customfield_11180 (:fields jissue))) [:fields :summary])
         (str (:key jissue) " " (:summary (:fields jissue)))]))
 
 (defn format-issue-map [issue-map]
     (s/join "\t" (select-values issue-map issue-map-keys)))
 
-(defn print-sprint-snapshot [l]
-    (dorun (map println (map format-issue-map l))))
+(defn print-sprint-snapshot! [issue-maps]
+    (dorun (map println (map format-issue-map issue-maps))))
 
-(defn extract-changelog [issue-url]
-    (let [histories (download-issue-changelog-histories-by-url issue-url)]
-        (let [items (map vector (w/walk #(:items %) seq histories) (map #(:created %) histories))]
-            (let [status-items (filter #(= "status" (:field (ffirst %))) items)]
-                (map #(into {} { :from (:fromString (ffirst %)) :to (:toString (ffirst %)) :date (last %) }) status-items)))))
+(defn get-changelog [changelog-histories]
+    (let [items (map vector (w/walk #(:items %) seq changelog-histories) (map #(:created %) changelog-histories))]
+        (let [status-items (filter #(= "status" (:field (ffirst %))) items)]
+            (map #(into {} { 
+                :from   (:fromString (ffirst %)) 
+                :to     (:toString (ffirst %)) 
+                :date   (last %)}) status-items))))
 
-(defn sprint-flow [mapped-issues]
-    (map #(assoc % :changelog (extract-changelog (:self %))) mapped-issues))
+(defn assoc-changelog! [mapped-issues]
+    (map #(assoc % :changelog (get-changelog (download-issue-changelog-histories-by-url! (:self %)))) mapped-issues))
 
-(defn p-flow [l]
-    (let [[changelog sprint] (take 2 l)]
+(defn print-sprint-flow! [l]
+    (let [changelog (first l)]
         (cond
-            (nil? changelog) '()
+            (nil? changelog) nil
             :else
                 (do
-                    (print-sprint-snapshot (list changelog))
+                    (print-sprint-snapshot! (list changelog))
                     (dorun (map #(println (s/join "\t" %)) (map #(select-values % [:from :to :date]) (:changelog changelog))))
-                    (p-flow (drop 2 l))))))
-
-(defn print-sprint-flow [l]
-    (let [flow (interleave l (map #(select-values % issue-map-keys) l))]
-        (p-flow flow)))
+                    (print-sprint-flow! (rest l))))))
 
 (defn -main [& args]
     (let [[opts args banner]
@@ -97,15 +95,17 @@
         (System/exit 0))
     (if
         (and
+            (:user opts)
             (:password opts)
-            (:sprint opts))
+            (:sprint opts)
+            (:jira-api-url opts))
         (do
             (def jira-api-url (:jira-api-url opts))
             (def username (:user opts))
             (def password (:password opts))
             (cond
-                (= "snapshot" (first args)) (print-sprint-snapshot          (map issue-map (download-sprint-issues (:sprint opts))))
-                (= "flow" (first args))     (print-sprint-flow (sprint-flow (map issue-map (download-sprint-issues (:sprint opts)))))
+                (= "snapshot" (first args)) (print-sprint-snapshot!               (map issue-map (download-sprint-issues! (:sprint opts))))
+                (= "flow" (first args))     (print-sprint-flow! (assoc-changelog! (map issue-map (download-sprint-issues! (:sprint opts)))))
                 :else (println "Nothing to do")))
         (println banner))))
   

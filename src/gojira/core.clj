@@ -52,7 +52,7 @@
         (:self jissue)
         (get-in jissue [:fields :status :name])
         (int (or (get-in jissue [:fields :customfield_10243]) 1))
-        (get-in (download-issue-by-key! (:customfield_11180 (:fields jissue))) [:fields :summary])
+        (get-in (download-issue-by-key! (:customfield_11180 (:fields jissue))) [:fields :customfield_11181])
         (str (:key jissue) " " (:summary (:fields jissue)))]))
 
 (defn format-issue-map [issue-map]

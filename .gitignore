@@ -9,4 +9,7 @@ pom.xml
 .lein-failures
 .lein-plugins
 .tmp-*
+run.sh
+.DS_Store
+
 

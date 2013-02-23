@@ -44,7 +44,7 @@
         (call-jira-api! url {:expand "changelog"}) 
         [:body :changelog :histories]))
 
-(def issue-map-keys [:order :self :status :points :epic-name :summary])
+(def issue-map-keys [:order :self :status :points :owner :epic-name :key :summary])
 
 (defn issue-map [jissue]
     "jissue: issue in json as returned by JIRA API"
@@ -53,11 +53,13 @@
         (:self jissue)
         (get-in jissue [:fields :status :name])
         (int (or (get-in jissue [:fields :customfield_10243]) 1))
+        (get-in jissue [:fields :assignee :displayName])
         (get-in (download-issue-by-key! (:customfield_11180 (:fields jissue))) [:fields :customfield_11181])
-        (str (:key jissue) " " (:summary (:fields jissue)))]))
+        (:key jissue)
+        (:summary (:fields jissue))]))
 
 (defn format-issue-map [issue-map]
-    (s/join "\t" (select-values issue-map issue-map-keys)))
+    (s/join ", " (select-values issue-map issue-map-keys)))
 
 (defn print-sprint-snapshot! [issue-maps]
     (dorun (map println (map format-issue-map issue-maps))))
@@ -81,7 +83,7 @@
             :else
                 (do
                     (print-sprint-snapshot! (list changelog))
-                    (dorun (map #(println (s/join "\t" %)) (map #(select-values % [:from :to :date :author]) (:changelog changelog))))
+                    (dorun (map #(println (s/join ", " %)) (map #(select-values % [:from :to :date :author]) (:changelog changelog))))
                     (print-sprint-flow! (rest l))))))
 
 (defn -main [& args]

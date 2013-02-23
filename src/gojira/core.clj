@@ -44,11 +44,12 @@
         (call-jira-api! url {:expand "changelog"}) 
         [:body :changelog :histories]))
 
-(def issue-map-keys [:self :status :points :epic-name :summary])
+(def issue-map-keys [:order :self :status :points :epic-name :summary])
 
 (defn issue-map [jissue]
     "jissue: issue in json as returned by JIRA API"
     (zipmap issue-map-keys [
+        (get-in jissue [:fields :customfield_10780])
         (:self jissue)
         (get-in jissue [:fields :status :name])
         (int (or (get-in jissue [:fields :customfield_10243]) 1))
@@ -104,8 +105,8 @@
             (def username (:user opts))
             (def password (:password opts))
             (cond
-                (= "snapshot" (first args)) (print-sprint-snapshot!               (map issue-map (download-sprint-issues! (:sprint opts))))
-                (= "flow" (first args))     (print-sprint-flow! (assoc-changelog! (map issue-map (download-sprint-issues! (:sprint opts)))))
+                (= "snapshot" (first args)) (print-sprint-snapshot!               (sort-by :order (map issue-map (download-sprint-issues! (:sprint opts)))))
+                (= "flow" (first args))     (print-sprint-flow! (assoc-changelog! (sort-by :order (map issue-map (download-sprint-issues! (:sprint opts))))))
                 :else (println "Nothing to do")))
         (println banner))))
   

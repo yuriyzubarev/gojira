@@ -63,12 +63,13 @@
     (dorun (map println (map format-issue-map issue-maps))))
 
 (defn get-changelog [changelog-histories]
-    (let [items (map vector (w/walk #(:items %) seq changelog-histories) (map #(:created %) changelog-histories))]
+    (let [items (map vector (w/walk #(:items %) seq changelog-histories) (map #(into {} {:date (:created %) :author (get-in % [:author :displayName])}) changelog-histories))]
         (let [status-items (filter #(= "status" (:field (ffirst %))) items)]
             (map #(into {} { 
                 :from   (:fromString (ffirst %)) 
                 :to     (:toString (ffirst %)) 
-                :date   (last %)}) status-items))))
+                :date   (:date (last %))
+                :author (:author (last %))}) status-items))))
 
 (defn assoc-changelog! [mapped-issues]
     (map #(assoc % :changelog (get-changelog (download-issue-changelog-histories-by-url! (:self %)))) mapped-issues))
@@ -80,7 +81,7 @@
             :else
                 (do
                     (print-sprint-snapshot! (list changelog))
-                    (dorun (map #(println (s/join "\t" %)) (map #(select-values % [:from :to :date]) (:changelog changelog))))
+                    (dorun (map #(println (s/join "\t" %)) (map #(select-values % [:from :to :date :author]) (:changelog changelog))))
                     (print-sprint-flow! (rest l))))))
 
 (defn -main [& args]

@@ -44,12 +44,15 @@
         (call-jira-api! url {:expand "changelog"}) 
         [:body :changelog :histories]))
 
-(def issue-map-keys [:order :self :status :points :owner :epic-name :key :summary])
+(def issue-map-keys [:order :filler0 :filler1 :filler2 :self :status :points :owner :epic-name :key :summary])
 
 (defn issue-map [jissue]
     "jissue: issue in json as returned by JIRA API"
     (zipmap issue-map-keys [
         (get-in jissue [:fields :customfield_10780])
+        ""
+        ""
+        ""
         (:self jissue)
         (get-in jissue [:fields :status :name])
         (int (or (get-in jissue [:fields :customfield_10243]) 1))
@@ -59,7 +62,7 @@
         (:summary (:fields jissue))]))
 
 (defn format-issue-map [issue-map]
-    (s/join ", " (select-values issue-map issue-map-keys)))
+    (s/join "," (select-values issue-map issue-map-keys)))
 
 (defn print-sprint-snapshot! [issue-maps]
     (dorun (map println (map format-issue-map issue-maps))))
@@ -68,10 +71,9 @@
     (let [items (map vector (w/walk #(:items %) seq changelog-histories) (map #(into {} {:date (:created %) :author (get-in % [:author :displayName])}) changelog-histories))]
         (let [status-items (filter #(= "status" (:field (ffirst %))) items)]
             (map #(into {} { 
-                :from   (:fromString (ffirst %)) 
-                :to     (:toString (ffirst %)) 
-                :date   (:date (last %))
-                :author (:author (last %))}) status-items))))
+                :from-to    (str (:fromString (ffirst %)) " -> " (:toString (ffirst %)))
+                :date       (:date (last %))
+                :author     (:author (last %))}) status-items))))
 
 (defn assoc-changelog! [mapped-issues]
     (map #(assoc % :changelog (get-changelog (download-issue-changelog-histories-by-url! (:self %)))) mapped-issues))
@@ -83,7 +85,7 @@
             :else
                 (do
                     (print-sprint-snapshot! (list changelog))
-                    (dorun (map #(println (s/join ", " %)) (map #(select-values % [:from :to :date :author]) (:changelog changelog))))
+                    (dorun (map #(println "," (s/join "," %)) (map #(select-values % [:from-to :date :author]) (:changelog changelog))))
                     (print-sprint-flow! (rest l))))))
 
 (defn -main [& args]

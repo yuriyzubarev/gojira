@@ -44,16 +44,14 @@
         (call-jira-api! url {:expand "changelog"}) 
         [:body :changelog :histories]))
 
-(def issue-map-keys [:order :filler0 :filler1 :filler2 :self :status :points :owner :epic-name :key :summary])
+(def issue-map-keys [:order :self :type :status :points :owner :epic-name :key :summary])
 
 (defn issue-map [jissue]
     "jissue: issue in json as returned by JIRA API"
     (zipmap issue-map-keys [
         (get-in jissue [:fields :customfield_10780])
-        ""
-        ""
-        ""
         (:self jissue)
+        (get-in jissue [:fields :issuetype :name])
         (get-in jissue [:fields :status :name])
         (int (or (get-in jissue [:fields :customfield_10243]) 1))
         (get-in jissue [:fields :assignee :displayName])
@@ -62,7 +60,15 @@
         (:summary (:fields jissue))]))
 
 (defn format-issue-map [issue-map]
-    (s/join "," (select-values issue-map issue-map-keys)))
+    (s/join ","
+        [
+            (:self issue-map)
+            (:type issue-map)
+            (:status issue-map)
+            (:epic-name issue-map)
+            (:owner issue-map)
+            (str "\"" (:key issue-map) " " (s/replace (:summary issue-map) "\"" "\"\"") "\"")
+            (:points issue-map)]))
 
 (defn print-sprint-snapshot! [issue-maps]
     (dorun (map println (map format-issue-map issue-maps))))
@@ -72,7 +78,7 @@
         (let [status-items (filter #(= "status" (:field (ffirst %))) items)]
             (map #(into {} { 
                 :from-to    (str (:fromString (ffirst %)) " -> " (:toString (ffirst %)))
-                :date       (:date (last %))
+                :date       (apply str (take 10 (:date (last %))))
                 :author     (:author (last %))}) status-items))))
 
 (defn assoc-changelog! [mapped-issues]

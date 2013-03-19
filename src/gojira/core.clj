@@ -5,23 +5,18 @@
         [clojure.tools.cli :as cli]
         [clojure.string :as s]))
 
-; globals for a CLI tool: evil or pragmatic?
-(def jira-api-url)
-(def username)
-(def password)
-
 (defn select-values [map ks]
     "From http://blog.jayfields.com/2011/01/clojure-select-keys-select-values-and.html"
     (remove nil? (reduce #(conj %1 (map %2)) [] ks)))
 
-(defn call-jira-api! [url query-params]
+(defn call-jira-api! [url query-params server-options]
     (let [fhash (str ".tmp-" (hash  url) (hash query-params))]
         (try
             (read-string (slurp fhash))
         (catch Exception e
             (let [content
-                    (client/get (if (= "http" (apply str (take 4 url))) url (str jira-api-url "/" url))
-                               {:basic-auth    [username password]
+                    (client/get (if (= "http" (apply str (take 4 url))) url (str (:jira-api-url server-options) "/" url))
+                               {:basic-auth    [(:user server-options) (:password server-options)]
                                 :content-type  :json
                                 :insecure?     true
                                 :query-params  query-params
@@ -29,22 +24,22 @@
                 (spit fhash content)
                 content)))))
 
-(defn download-sprint-issues! [sprint-id]
+(defn download-sprint-issues! [sprint-id server-options]
     (get-in 
-        (call-jira-api! "search" {:jql (str "sprint = " sprint-id " AND issuetype in standardIssueTypes()")}) 
+        (call-jira-api! "search" {:jql (str "sprint = " sprint-id " AND issuetype in standardIssueTypes()")} server-options) 
         [:body :issues]))
 
-(defn download-issue-by-key! [issue-key]
+(defn download-issue-by-key! [issue-key server-options]
     (get-in 
-        (call-jira-api! "search" {:jql (str "issue = " issue-key)}) 
+        (call-jira-api! "search" {:jql (str "issue = " issue-key)} server-options) 
         [:body :issues 0]))
 
-(defn download-issue-changelog-histories-by-url! [url]
+(defn download-issue-changelog-histories-by-url! [url server-options]
     (get-in 
-        (call-jira-api! url {:expand "changelog"}) 
+        (call-jira-api! url {:expand "changelog"} server-options) 
         [:body :changelog :histories]))
 
-(def issue-map-keys [:order :self :type :status :points :owner :epic-name :key :summary])
+(def issue-map-keys [:order :self :type :status :points :owner :epic-key :key :summary])
 
 (defn issue-map [jissue]
     "jissue: issue in json as returned by JIRA API"
@@ -55,7 +50,8 @@
         (get-in jissue [:fields :status :name])
         (int (or (get-in jissue [:fields :customfield_10243]) 1))
         (get-in jissue [:fields :assignee :displayName])
-        (get-in (download-issue-by-key! (:customfield_11180 (:fields jissue))) [:fields :customfield_11181])
+        ; (get-in (download-issue-by-key! (:customfield_11180 (:fields jissue)) server-options) [:fields :customfield_11181])
+        (get-in jissue [:fields :customfield_11180])
         (:key jissue)
         (:summary (:fields jissue))]))
 
@@ -81,8 +77,8 @@
                 :date       (apply str (take 10 (:date (last %))))
                 :author     (:author (last %))}) status-items))))
 
-(defn assoc-changelog! [mapped-issues]
-    (map #(assoc % :changelog (get-changelog (download-issue-changelog-histories-by-url! (:self %)))) mapped-issues))
+(defn assoc-changelog! [mapped-issues server-options]
+    (map #(assoc % :changelog (get-changelog (download-issue-changelog-histories-by-url! (:self %) server-options))) mapped-issues))
 
 (defn print-sprint-flow! [l]
     (let [changelog (first l)]
@@ -111,13 +107,9 @@
             (:password opts)
             (:sprint opts)
             (:jira-api-url opts))
-        (do
-            (def jira-api-url (:jira-api-url opts))
-            (def username (:user opts))
-            (def password (:password opts))
-            (cond
-                (= "snapshot" (first args)) (print-sprint-snapshot!               (sort-by :order (map issue-map (download-sprint-issues! (:sprint opts)))))
-                (= "flow" (first args))     (print-sprint-flow! (assoc-changelog! (sort-by :order (map issue-map (download-sprint-issues! (:sprint opts))))))
-                :else (println "Nothing to do")))
+        (cond
+            (= "snapshot" (first args)) (print-sprint-snapshot!               (sort-by :order (map #(assoc % :epic-name (get-in (download-issue-by-key! (:epic-key %) opts) [:fields :customfield_11181])) (map issue-map (download-sprint-issues! (:sprint opts) opts)))))
+            (= "flow" (first args))     (print-sprint-flow! (assoc-changelog! (sort-by :order (map #(assoc % :epic-name (get-in (download-issue-by-key! (:epic-key %) opts) [:fields :customfield_11181])) (map issue-map (download-sprint-issues! (:sprint opts) opts)))) opts))
+                :else (println "Nothing to do"))
         (println banner))))
   

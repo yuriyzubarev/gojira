@@ -107,9 +107,10 @@
             (:password opts)
             (:sprint opts)
             (:jira-api-url opts))
-        (cond
-            (= "snapshot" (first args)) (print-sprint-snapshot!               (sort-by :order (map #(assoc % :epic-name (get-in (download-issue-by-key! (:epic-key %) opts) [:fields :customfield_11181])) (map issue-map (download-sprint-issues! (:sprint opts) opts)))))
-            (= "flow" (first args))     (print-sprint-flow! (assoc-changelog! (sort-by :order (map #(assoc % :epic-name (get-in (download-issue-by-key! (:epic-key %) opts) [:fields :customfield_11181])) (map issue-map (download-sprint-issues! (:sprint opts) opts)))) opts))
-                :else (println "Nothing to do"))
+        (let [sprint-issues (sort-by :order (map #(assoc % :epic-name (get-in (download-issue-by-key! (:epic-key %) opts) [:fields :customfield_11181])) (map issue-map (download-sprint-issues! (:sprint opts) opts))))]
+            (cond
+                (= "snapshot" (first args)) (print-sprint-snapshot!                     sprint-issues)
+                (= "flow" (first args))     (print-sprint-flow!     (assoc-changelog!   sprint-issues opts))
+                :else (println "Nothing to do")))
         (println banner))))
   

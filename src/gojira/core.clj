@@ -55,7 +55,7 @@
         (:key jissue)
         (:summary (:fields jissue))]))
 
-(defn format-issue-map [issue-map]
+(defn format-issue-map-as-csv [issue-map]
     (s/join ","
         [
             (:self issue-map)
@@ -66,8 +66,29 @@
             (str "\"" (:key issue-map) " " (s/replace (:summary issue-map) "\"" "\"\"") "\"")
             (:points issue-map)]))
 
-(defn print-sprint-snapshot! [issue-maps]
-    (dorun (map println (map format-issue-map issue-maps))))
+(defn html-table-top []
+    (str 
+        "<table cellpadding='2'>"
+        "<tr>"
+        "<th width='100' align='left'>Type</th>"
+        "<th width='100' align='left'>Epic</th>"
+        "<th width='100' align='left'>Owner</th>"
+        "<th width='150' align='left'>Summary</th>"
+        "<th width='20'  align='left'>Points</th>"
+        "</tr>"))
+
+(defn format-issue-map-as-html [issue-map]
+    (str
+        "<tr>"
+        "<td>" (:type issue-map) "</td>"
+        "<td>" (:epic-name issue-map) "</td>"
+        "<td>" (:owner issue-map) "</td>"
+        "<td>" (:key issue-map) " " (:summary issue-map) "</td>"
+        "<td>" (:points issue-map) "</td>"
+        "</tr>"))
+
+(defn print-sprint-snapshot! [issue-maps f-format]
+    (dorun (map println (map f-format issue-maps))))
 
 (defn get-changelog [changelog-histories]
     (let [items (map vector (w/walk #(:items %) seq changelog-histories) (map #(into {} {:date (:created %) :author (get-in % [:author :displayName])}) changelog-histories))]
@@ -86,7 +107,7 @@
             (nil? changelog) nil
             :else
                 (do
-                    (print-sprint-snapshot! (list changelog))
+                    (print-sprint-snapshot! (list changelog) format-issue-map-as-csv)
                     (dorun (map #(println "," (s/join "," %)) (map #(select-values % [:from-to :date :author]) (:changelog changelog))))
                     (print-sprint-flow! (rest l))))))
 
@@ -109,8 +130,22 @@
             (:jira-api-url opts))
         (let [sprint-issues (sort-by :order (map #(assoc % :epic-name (get-in (download-issue-by-key! (:epic-key %) opts) [:fields :customfield_11181])) (map issue-map (download-sprint-issues! (:sprint opts) opts))))]
             (cond
-                (= "snapshot" (first args)) (print-sprint-snapshot!                     sprint-issues)
-                (= "flow" (first args))     (print-sprint-flow!     (assoc-changelog!   sprint-issues opts))
+                (= "snapshot" (first args))     (print-sprint-snapshot! sprint-issues format-issue-map-as-csv)
+                (= "flow" (first args))         (print-sprint-flow! (assoc-changelog! sprint-issues opts))
+                (= "by-status" (first args))    (do 
+                                                    (println "<p>Please update the Jira tickets if they don't accurately reflect the reality.</p>")
+                                                    (println "<h3>In flight</h3>")
+                                                    (println (html-table-top))
+                                                    (print-sprint-snapshot! (filter #(or (= "In Progress" (:status %)) (= "In Test" (:status %))) sprint-issues) format-issue-map-as-html)
+                                                    (println "</table>")
+                                                    (println "<h3>Not started</h3>")
+                                                    (println (html-table-top))
+                                                    (print-sprint-snapshot! (filter #(= "Open" (:status %)) sprint-issues) format-issue-map-as-html)
+                                                    (println "</table>")
+                                                    (println "<h3>Closed</h3>")
+                                                    (println (html-table-top))
+                                                    (print-sprint-snapshot! (filter #(= "Closed" (:status %)) sprint-issues) format-issue-map-as-html)
+                                                    (println "</table>"))
                 :else (println "Nothing to do")))
         (println banner))))
   

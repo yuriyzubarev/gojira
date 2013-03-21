@@ -74,7 +74,6 @@
         "<th width='100' align='left'>Epic</th>"
         "<th width='100' align='left'>Owner</th>"
         "<th width='150' align='left'>Summary</th>"
-        "<th width='20'  align='left'>Points</th>"
         "</tr>"))
 
 (defn format-issue-map-as-html [issue-map]
@@ -84,7 +83,6 @@
         "<td>" (:epic-name issue-map) "</td>"
         "<td>" (:owner issue-map) "</td>"
         "<td>" (:key issue-map) " " (:summary issue-map) "</td>"
-        "<td>" (:points issue-map) "</td>"
         "</tr>"))
 
 (defn print-sprint-snapshot! [issue-maps f-format]

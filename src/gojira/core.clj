@@ -50,10 +50,17 @@
         (get-in jissue [:fields :status :name])
         (int (or (get-in jissue [:fields :customfield_10243]) 1))
         (get-in jissue [:fields :assignee :displayName])
-        ; (get-in (download-issue-by-key! (:customfield_11180 (:fields jissue)) server-options) [:fields :customfield_11181])
         (get-in jissue [:fields :customfield_11180])
         (:key jissue)
         (:summary (:fields jissue))]))
+
+(defn get-sprint-issues! [sprint-id server-options]
+    (defn assoc-epic-name [m]
+        (assoc m :epic-name
+            (get-in 
+                (download-issue-by-key! (:epic-key m) server-options) 
+                [:fields :customfield_11181])))
+    (sort-by :order (map assoc-epic-name (map issue-map (download-sprint-issues! sprint-id server-options)))))
 
 (defn format-issue-map-as-csv [issue-map]
     (s/join ","
@@ -126,7 +133,7 @@
             (:password opts)
             (:sprint opts)
             (:jira-api-url opts))
-        (let [sprint-issues (sort-by :order (map #(assoc % :epic-name (get-in (download-issue-by-key! (:epic-key %) opts) [:fields :customfield_11181])) (map issue-map (download-sprint-issues! (:sprint opts) opts))))]
+        (let [sprint-issues (get-sprint-issues! (:sprint opts) opts)]
             (cond
                 (= "snapshot" (first args))     (print-sprint-snapshot! sprint-issues format-issue-map-as-csv)
                 (= "flow" (first args))         (print-sprint-flow! (assoc-changelog! sprint-issues opts))

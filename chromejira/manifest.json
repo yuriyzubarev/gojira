@@ -1,0 +1,14 @@
+{
+  "name": "JIRA Tools",
+  "description": "JIRA tools",
+  "version": "1.0",
+  "manifest_version": 2,
+  "permissions": ["clipboardWrite"],
+  "content_scripts": [
+    {
+      "matches": ["*://*/jira/browse/*"],
+      "css": ["jira.css"],
+      "js": ["jquery.js", "jira.js"]
+    }
+  ]
+}

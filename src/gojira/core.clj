@@ -5,6 +5,8 @@
         [clojure.tools.cli :as cli]
         [clojure.string :as s]))
 
+(def jira-base-url)
+
 (defn select-values [map ks]
     "From http://blog.jayfields.com/2011/01/clojure-select-keys-select-values-and.html"
     (remove nil? (reduce #(conj %1 (map %2)) [] ks)))
@@ -15,7 +17,7 @@
             (read-string (slurp fhash))
         (catch Exception e
             (let [content
-                    (client/get (if (= "http" (apply str (take 4 url))) url (str (:jira-api-url server-options) "/" url))
+                    (client/get (if (= "http" (apply str (take 4 url))) url (str (:jira-api-url server-options) "/rest/api/2/" url))
                                {:basic-auth    [(:user server-options) (:password server-options)]
                                 :content-type  :json
                                 :insecure?     true
@@ -89,7 +91,7 @@
         "<td>" (:type issue-map) "</td>"
         "<td>" (:epic-name issue-map) "</td>"
         "<td>" (:owner issue-map) "</td>"
-        "<td>" (:key issue-map) " " (:summary issue-map) "</td>"
+        "<td>" "<a href='" jira-base-url "/browse/" (:key issue-map) "'>" (:key issue-map) "</a>" " " (:summary issue-map) "</td>"
         "</tr>"))
 
 (defn print-sprint-snapshot! [issue-maps f-format]
@@ -134,6 +136,7 @@
             (:sprint opts)
             (:jira-api-url opts))
         (let [sprint-issues (get-sprint-issues! (:sprint opts) opts)]
+            (def jira-base-url (:jira-api-url opts))
             (cond
                 (= "snapshot" (first args))     (print-sprint-snapshot! sprint-issues format-issue-map-as-csv)
                 (= "flow" (first args))         (print-sprint-flow! (assoc-changelog! sprint-issues opts))
